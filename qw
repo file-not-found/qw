@@ -101,7 +101,7 @@ start_ap(){
     if [ $arg2 ]
     then
         ssid=$arg2
-        read -p "enter passphrase: " wpa2_passphrase
+        read -p "Enter passphrase: " wpa2_passphrase
     fi
     cat > $ap_file << AP_CONF
 # temporary hostap config file of qw
@@ -123,12 +123,23 @@ dhcp-range=interface:$wlan_iface,10.113.119.20,10.113.119.60,infinite
 DHCP_CONF
 
 
+    # find interface of default route
+    out_iface=`ip route | grep -e 'default.*via' -e '0.0.0.0.*via' | head -n 1 | cut -d " " -f 5`
+
+    if [ -z "$out_iface" ]
+    then
+        echo "Warning: no interface for default route found."
+    elif [ $wlan_iface = $out_iface ]
+    then
+        echo "Warning: the default route is using the selected wlan interface."
+    fi
+
     if [ $out_iface ] && [ $wlan_iface != $out_iface ]
     then
         echo 1 > /proc/sys/net/ipv4/ip_forward
         iptables -t nat -A POSTROUTING -o $out_iface -j MASQUERADE
     else
-        echo "Warning: Forwarding and NAT won't be enabled."
+        echo "Warning: forwarding and NAT won't be enabled."
     fi
 
     ip a a 10.113.119.1/24 dev $wlan_iface
@@ -154,7 +165,7 @@ connect_to_ap(){
     if [ $arg2 ]
     then
         ssid=$arg2
-        read -p "enter passphrase: " wpa2_passphrase
+        read -p "Enter passphrase: " wpa2_passphrase
     fi
     trap 'disconnect' SIGINT
     wpa_passphrase $ssid $wpa2_passphrase > $wpa_file
@@ -199,9 +210,9 @@ old_forward_value=`cat /proc/sys/net/ipv4/ip_forward`
 wlan_iface=`iw dev | grep Interface | cut -d " " -f 2`
 if [ `echo "$wlan_iface" | wc -l` -gt 1 ]
 then
-    echo "multiple wlan interfaces found:"
+    echo "Multiple wlan interfaces found:"
     echo "$wlan_iface" | nl
-    read -p "enter number of interface to use: " index
+    read -p "Enter number of interface to use: " index
     wlan_iface=$(echo "$wlan_iface"| sed -n -e ${index}p)
 fi
 
@@ -209,17 +220,6 @@ if [ -z $wlan_iface ]
 then
     echo "Error: no wlan interface found"
     exit 1
-fi
-
-# find interface of default route
-out_iface=`ip route | grep -e 'default.*via' -e '0.0.0.0.*via' | head -n 1 | cut -d " " -f 5`
-
-if [ -z "$out_iface" ]
-then
-    echo "Warning: no interface for default route found."
-elif [ $wlan_iface = $out_iface ]
-then
-    echo "Warning: the default route is using the selected wlan interface."
 fi
 
 if [ $# -gt 1 ]
