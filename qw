@@ -1,0 +1,207 @@
+#!/bin/bash
+
+# global variables
+me=`basename $0`
+version="0.1"
+
+ap_file="/tmp/qw_ap.conf"
+dhcp_file="/tmp/qw_dhcp.conf"
+wpa_file="/tmp/qw_wpa.conf"
+
+ssid="quickAP"
+wpa2_passphrase="dontKeepThis"
+
+
+
+print_usage(){
+    echo "$me-$version the quick wireless tool
+Usage: $me command
+
+commands:
+   ap               start configured ap
+   connect          connect to configured ap
+   sniff [channel]      switch to monitor mode
+   managed          switch to managed mode
+   up               put interface up
+   down             stop everything and put interface down
+   random           set random mac
+   permanent        reset permanent mac
+
+one letter abbreviations are allowed (e.g. '$me a')"
+}
+
+
+
+kill_all(){
+    #TODO: distinguish between own and foreign processes
+    systemctl stop NetworkManager
+    killall -q dnsmasq
+    killall -q hostapd
+    killall -q wpa_supplicant
+    killall -q dhclient
+}
+
+
+
+set_interface_up(){
+    ip l s $wlan_iface up
+}
+
+
+
+set_interface_down(){
+    kill_all
+    ip l s $wlan_iface down
+}
+
+
+
+set_managed_mode(){
+    set_interface_down
+    iw $wlan_iface set type managed
+    set_interface_up
+}
+
+
+
+set_monitor_mode(){
+    type airodump-ng >/dev/null 2>&1 || { echo >&2 "Error: airodump-ng is required."; exit 1; }
+    set_interface_down
+    iw $wlan_iface set type monitor
+    ip l s $wlan_iface up
+    airodump-ng $wlan_iface $channel
+}
+
+
+
+stop_ap(){
+    kill_all
+    echo $old_forward_value > /proc/sys/net/ipv4/ip_forward
+    iptables -t nat -D POSTROUTING -o $out_iface -j MASQUERADE
+    ip a d 10.113.119.1/24 dev $wlan_iface
+    rm $ap_file
+    rm $dhcp_file
+}
+
+
+
+start_ap(){
+    type hostapd >/dev/null 2>&1 || { echo >&2 "Error: hostapd is required."; exit 1; }
+    type dnsmasq >/dev/null 2>&1 || { echo >&2 "Error: dnsmasq is required."; exit 1; }
+    type iptables >/dev/null 2>&1 || { echo >&2 "Error: iptables is required."; exit 1; }
+    set_managed_mode
+    cat > $ap_file << AP_CONF
+# temporary hostap config file of qw
+interface=$wlan_iface
+driver=nl80211
+ssid=$ssid
+channel=1
+hw_mode=g
+auth_algs=1
+wpa=2
+wpa_passphrase=$wpa2_passphrase
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP 
+AP_CONF
+    cat > $dhcp_file << DHCP_CONF
+# temporary dnsmasq config file of qw
+interface=$wlan_iface
+dhcp-range=interface:$wlan_iface,10.113.119.20,10.113.119.60,infinite 
+DHCP_CONF
+
+    echo 1 > /proc/sys/net/ipv4/ip_forward
+    iptables -t nat -A POSTROUTING -o $out_iface -j MASQUERADE
+    ip a a 10.113.119.1/24 dev $wlan_iface
+
+    trap 'stop_ap' SIGINT
+    dnsmasq -C $dhcp_file
+    hostapd $ap_file
+}
+
+
+
+disconnect(){
+    killall dhclient
+    rm $wpa_file
+}
+
+
+
+connect_to_ap(){
+    type wpa_supplicant >/dev/null 2>&1 || { echo >&2 "Error: wpa_supplicant is required."; exit 1; }
+    type dhclient >/dev/null 2>&1 || { echo >&2 "Error: dhclient is required."; exit 1; }
+    set_managed_mode
+    trap 'disconnect' SIGINT
+    wpa_passphrase $ssid $wpa2_passphrase > $wpa_file
+    dhclient $wlan_iface &
+    wpa_supplicant -i $wlan_iface -c $wpa_file
+}
+
+
+
+set_random_mac(){
+    type macchanger >/dev/null 2>&1 || { echo >&2 "Error: macchanger is required."; exit 1; }
+    set_interface_down
+    macchanger -r $wlan_iface
+}
+
+
+
+set_permanent_mac(){
+    type macchanger >/dev/null 2>&1 || { echo >&2 "Error: macchanger is required."; exit 1; }
+    set_interface_down
+    macchanger -p $wlan_iface
+}
+
+
+
+if [ $# -lt 1 ]
+then
+    # no command parameter given, print usage and quit
+    print_usage
+    exit 1
+fi
+
+# store ip forwarding settings to reset afterwards
+old_forward_value=`cat /proc/sys/net/ipv4/ip_forward`
+
+# find available wlan interfaces and prompt user if multiple are found
+wlan_iface=`iw dev | grep phy -A1 | grep Interface | cut -d " " -f 2`
+if [ `echo "$wlan_iface" | wc -l` -gt 1 ]
+then
+    echo "multiple wlan interfaces found:"
+    echo "$wlan_iface" | nl
+    read -p "enter number of interface to use: " index
+    wlan_iface=$(echo "$wlan_iface"| sed -n -e ${index}p)
+fi
+
+# find interface of default route
+out_iface=`ip route | grep -e 'default.*via' -e '0.0.0.0.*via' | head -n 1 | cut -d " " -f 5`
+
+if [ "$wlan_iface" = "$out_iface" ]
+then
+    echo "Warning: the default route is using the selected wlan interface"
+fi
+
+if [ $# -gt 1 ]
+then
+channel=" -c $2"
+else
+channel=""
+fi
+
+type ip >/dev/null 2>&1 || { echo >&2 "Error: ip is required."; exit 1; }
+type iw >/dev/null 2>&1 || { echo >&2 "Error: iw is required."; exit 1; }
+
+case $1 in
+    "a"|"ap")           start_ap;;
+    "c"|"connect")      connect_to_ap;;
+    "s"|"sniff")        set_monitor_mode;;
+    "m"|"managed")      set_managed_mode;;
+    "u"|"up")           set_interface_up;;
+    "d"|"down")         set_interface_down;;
+    "r"|"random")       set_random_mac;;
+    "p"|"permanent")    set_permanent_mac;;
+    *)                  print_usage;;
+esac
+exit 0
