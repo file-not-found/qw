@@ -39,8 +39,8 @@ Set interface in managed mode
     qw m
 
 Kill every process which might interfere and put interface down
-Warning: this stops/kills the following processes without prompting
-(NetworkManager, dhclient, wpa\_supplicant, dnsmasq, hostapd)
+Warning: this stops/kills the following processes without prompting:
+NetworkManager, dhclient, wpa\_supplicant, dnsmasq and hostapd
 
     qm k
 
