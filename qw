@@ -20,7 +20,7 @@ Usage: $me command
 commands:
    ap               start configured ap
    connect          connect to configured ap
-   sniff [channel]      switch to monitor mode
+   sniff [channel]  switch to monitor mode
    managed          switch to managed mode
    up               put interface up
    down             stop everything and put interface down
