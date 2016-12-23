@@ -1,6 +1,9 @@
 # qw
 quick wireless - bash script to quickly switch wireless modes
 
+To connect to systems via wlan just run _qw a_ on one machine and _qw c_ on the other.
+More options can be found below.
+
 ## Installation
 The following tools are needed
 * hostapd
@@ -28,7 +31,7 @@ WPA passphrase.
 
 Sniff in monitor mode using airodump-ng
 
-    qw s
+    qw s [channel]
 
 You can misuse the channel to pass multiple parameters to airodump-ng
 
@@ -38,7 +41,7 @@ Set interface in managed mode
 
     qw m
 
-Kill every process which might interfere and put interface down
+Kill every process which might interfere and put interface down.
 Warning: this stops/kills the following processes without prompting:
 NetworkManager, dhclient, wpa\_supplicant, dnsmasq and hostapd
 
