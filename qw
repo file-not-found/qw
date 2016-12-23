@@ -187,6 +187,11 @@ then
     exit 1
 fi
 
+if [ "$EUID" -ne 0 ]
+  then echo "Error: $me has to be run as root"
+  exit 1
+fi
+
 # store ip forwarding settings to reset afterwards
 old_forward_value=`cat /proc/sys/net/ipv4/ip_forward`
 
