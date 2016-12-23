@@ -197,18 +197,18 @@ old_forward_value=`cat /proc/sys/net/ipv4/ip_forward`
 
 # find available wlan interfaces and prompt user if multiple are found
 wlan_iface=`iw dev | grep Interface | cut -d " " -f 2`
-if [ -z $wlan_iface ]
-then
-    echo "Error: no wlan interface found"
-    exit 1
-fi
-
 if [ `echo "$wlan_iface" | wc -l` -gt 1 ]
 then
     echo "multiple wlan interfaces found:"
     echo "$wlan_iface" | nl
     read -p "enter number of interface to use: " index
     wlan_iface=$(echo "$wlan_iface"| sed -n -e ${index}p)
+fi
+
+if [ -z $wlan_iface ]
+then
+    echo "Error: no wlan interface found"
+    exit 1
 fi
 
 # find interface of default route
