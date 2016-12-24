@@ -2,7 +2,7 @@
 
 # global variables
 me=`basename $0`
-version="0.2"
+version="0.4"
 
 ap_file="/tmp/qw_ap.conf"
 dhcp_file="/tmp/qw_dhcp.conf"
@@ -10,7 +10,7 @@ dhcp_pidfile="/tmp/qw_dhcp.pid"
 dhclient_pidfile="/tmp/qw_dhclient.pid"
 wpa_file="/tmp/qw_wpa.conf"
 
-ssid="quickAP"
+ssid="qw"
 passphrase="dontKeepThis"
 
 
@@ -23,6 +23,7 @@ commands:
    ap [ssid]        start configured ap
    connect [ssid]   connect to configured ap
    sniff [channel]  start sniffing in monitor mode
+   deauth [bssid]   send deauth to ap
    managed          switch to managed mode
    kill             kill everything and put interface down
    fake [mac]       set fake mac (default: random)
@@ -70,7 +71,7 @@ set_monitor_mode(){
     set_interface_down
     iw $wlan_iface set type monitor
     set_interface_up
-    if [ $arg2 ]
+    if [ "$arg2" ]
     then
         channel="-c $arg2"
     fi
@@ -82,7 +83,7 @@ set_monitor_mode(){
 stop_ap(){
     kill `cat $dhcp_pidfile`
     echo $old_forward_value > /proc/sys/net/ipv4/ip_forward
-    if [ $out_iface ] && [ $wlan_iface != $out_iface ]
+    if [ "$out_iface" ] && [ "$wlan_iface" != "$out_iface" ]
     then
         iptables -t nat -D POSTROUTING -o $out_iface -j MASQUERADE
     fi
@@ -98,7 +99,7 @@ start_ap(){
     type dnsmasq >/dev/null 2>&1 || { echo >&2 "Error: dnsmasq is required."; exit 1; }
     type iptables >/dev/null 2>&1 || { echo >&2 "Error: iptables is required."; exit 1; }
     set_managed_mode
-    if [ $arg2 ]
+    if [ "$arg2" ]
     then
         ssid=$arg2
         read -p "Enter passphrase (leave blank for open network): " passphrase
@@ -112,7 +113,7 @@ channel=1
 hw_mode=g
 auth_algs=1
 AP_CONF
-    if [ $passphrase ]
+    if [ "$passphrase" ]
     then
         cat >> $ap_file << WPA_CONF
 wpa=2
@@ -134,12 +135,12 @@ DHCP_CONF
     if [ -z "$out_iface" ]
     then
         echo "Warning: no interface for default route found."
-    elif [ $wlan_iface = $out_iface ]
+    elif [ "$wlan_iface" = "$out_iface" ]
     then
         echo "Warning: the default route is using the selected wlan interface."
     fi
 
-    if [ $out_iface ] && [ $wlan_iface != $out_iface ]
+    if [ "$out_iface" ] && [ "$wlan_iface" != "$out_iface" ]
     then
         echo 1 > /proc/sys/net/ipv4/ip_forward
         iptables -t nat -A POSTROUTING -o $out_iface -j MASQUERADE
@@ -167,13 +168,13 @@ connect_to_ap(){
     type wpa_supplicant >/dev/null 2>&1 || { echo >&2 "Error: wpa_supplicant is required."; exit 1; }
     type dhclient >/dev/null 2>&1 || { echo >&2 "Error: dhclient is required."; exit 1; }
     set_managed_mode
-    if [ $arg2 ]
+    if [ "$arg2" ]
     then
         ssid=$arg2
         read -p "Enter passphrase (leave blank for open network): " passphrase
     fi
     trap 'disconnect' SIGINT
-    if [ $passphrase ]
+    if [ "$passphrase" ]
     then
         wpa_passphrase $ssid $passphrase > $wpa_file
         dhclient $wlan_iface -pf $dhclient_pidfile &
@@ -192,10 +193,23 @@ SUP_CONF
 
 
 
+send_deauth(){
+    if [ -z "$arg2"  ]
+    then
+        echo "Error: no target bssid provided."
+        exit 1
+    else
+        type aireplay-ng >/dev/null 2>&1 || { echo >&2 "Error: aireplay-ng is required."; exit 1; }
+        aireplay-ng -0 1 -a $arg2 $wlan_iface
+    fi
+}
+
+
+
 set_fake_mac(){
     type macchanger >/dev/null 2>&1 || { echo >&2 "Error: macchanger is required."; exit 1; }
     set_interface_down
-    if [ $arg2 ]
+    if [ "$arg2" ]
     then
         macchanger -m $arg2 $wlan_iface
     else
@@ -238,7 +252,7 @@ then
     wlan_iface=$(echo "$wlan_iface"| sed -n -e ${index}p)
 fi
 
-if [ -z $wlan_iface ]
+if [ -z "$wlan_iface" ]
 then
     echo "Error: no wlan interface found"
     exit 1
@@ -256,6 +270,7 @@ case $1 in
     "a"|"ap")           start_ap;;
     "c"|"connect")      connect_to_ap;;
     "s"|"sniff")        set_monitor_mode;;
+    "d"|"deauth")       send_deauth;;
     "m"|"managed")      set_managed_mode;;
     "k"|"kill")         kill_all;;
     "f"|"fake")         set_fake_mac;;
