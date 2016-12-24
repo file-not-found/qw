@@ -44,3 +44,7 @@ To kill every process which might interfere and put the interface down run
 
 Warning: this stops/kills the following processes without prompting:
 NetworkManager, dhclient, wpa\_supplicant, dnsmasq and hostapd
+
+For more information on the underlying mechanisms check out my website exitno.de for 
+[wlan via command line](http://exitno.de/linux_wlan/) or
+for [wlan attacks](http://exitno.de/wlan_attacks/).
