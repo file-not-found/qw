@@ -181,7 +181,8 @@ connect_to_ap(){
     else
         cat > $wpa_file << SUP_CONF
 network={
-        ssid="$ssid"
+    ssid="$ssid"
+    key_mgmt=NONE
 }
 SUP_CONF
         dhclient $wlan_iface -pf $dhclient_pidfile &
