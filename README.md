@@ -1,8 +1,9 @@
 # qw
 quick wireless - bash script to quickly switch wireless modes
 
-To connect to systems via wlan just run _qw a_ on one machine and _qw c_ on the other.
-More options can be found below.
+With qw you can setup a preconfigured access point and connect clients to it with a single command. In addition the script can be used to sniff in monitor mode, deauth clients from a network and capture the handshake all with only a single and short command for each action.
+
+Furthermore the script can be used to connect to any open or wpa protected network, change and reset the mac address, sniff with airodump-ng and to kill/stop processes which might interfere.
 
 ## Installation
 The following tools are needed
@@ -15,47 +16,31 @@ The following tools are needed
 I recommend putting the qw file into the PATH
 
 ## Howto
-Print help
+To setup an access point with the parameters configured inside the qw script just run
 
-    qw
+    qw a
 
-Start hostapd and dnsmasq. If a default route is found forwarding and NAT are enabled.
-If a ssid is given the user will be prompted for a WPA2 passphrase as well.
+on all the clients run
 
-    qw a [ssid]
+    qw c
 
-Connect to an AP using wpa\_supplicant. If a ssid is given the user will be promted for the
-WPA passphrase.
-
-    qw c [ssid]
-
-Sniff in monitor mode using airodump-ng
-
-    qw s [channel]
-
-You can misuse the channel to pass multiple parameters to airodump-ng
-
-    qw s "2 -w outfile"
-
-Set interface in managed mode
-
-    qw m
-
-Kill every process which might interfere and put interface down.
-Warning: this stops/kills the following processes without prompting:
-NetworkManager, dhclient, wpa\_supplicant, dnsmasq and hostapd
-
-    qm k
-
-Set random mac using macchanger
-
-    qm r
-
-Reset permanent mac using macchanger
-
-    qm p
+to connect to the access point and to request an IP address via dhcp.
 
 The content of the default config files for hostapd and wpa\_supplicant are 
 included in the script for portablity reasons. To customize the settings
 just edit the lines in the script.
-Be sure to change the wpa2 passphrase.
+Be sure to change the wpa passphrase.
+
+If you want to record a wpa handshake start sniffing in monitor mode using 
+airodump-ng and pass the outfile in the channel parameter. Afterwards run the deauth 
+attack against the access point.
+
+    qw s "2 -w outfile"
+    qw d <bssid>
+
+To kill every process which might interfere and put the interface down run
+
+    qm k
+
+Warning: this stops/kills the following processes without prompting:
+NetworkManager, dhclient, wpa\_supplicant, dnsmasq and hostapd
