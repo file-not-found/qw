@@ -101,7 +101,7 @@ start_ap(){
     if [ $arg2 ]
     then
         ssid=$arg2
-        read -p "Enter passphrase: " passphrase
+        read -p "Enter passphrase (leave blank for open network): " passphrase
     fi
     cat > $ap_file << AP_CONF
 # temporary hostap config file of qw
@@ -170,7 +170,7 @@ connect_to_ap(){
     if [ $arg2 ]
     then
         ssid=$arg2
-        read -p "Enter passphrase: " passphrase
+        read -p "Enter passphrase (leave blank for open network): " passphrase
     fi
     trap 'disconnect' SIGINT
     if [ $passphrase ]
