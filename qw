@@ -2,14 +2,16 @@
 
 # global variables
 me=`basename $0`
-version="0.4"
+version="0.5"
 
-ap_file="/tmp/qw_ap.conf"
-dhcp_file="/tmp/qw_dhcp.conf"
-dhcp_pidfile="/tmp/qw_dhcp.pid"
+# filenames for config and pid files
+hostapd_file="/tmp/qw_hostapd.conf"
+dnsmasq_file="/tmp/qw_dnsmasq.conf"
+dnsmasq_pidfile="/tmp/qw_dnsmasq.pid"
 dhclient_pidfile="/tmp/qw_dhclient.pid"
-wpa_file="/tmp/qw_wpa.conf"
+wpa_supplicant_file="/tmp/qw_wpa_supplicant.conf"
 
+# shared wlan variables for ap and client
 ssid="qw"
 passphrase="dontKeepThis"
 
@@ -22,8 +24,8 @@ Usage: $me command
 commands:
    ap [ssid]        start configured ap
    connect [ssid]   connect to configured ap
-   sniff [channel]  start sniffing in monitor mode
-   deauth [bssid]   send deauth to ap
+   sniff [arg]*     start sniffing with 'airodump-ng [arg]*'
+   deauth bssid     send deauth to ap
    managed          switch to managed mode
    kill             kill everything and put interface down
    fake [mac]       set fake mac (default: random)
@@ -32,31 +34,13 @@ commands:
 one letter abbreviations are allowed (e.g. '$me a')"
 }
 
-
-
-kill_all(){
-    #TODO: distinguish between own and foreign processes
-    systemctl stop NetworkManager
-    killall -q dnsmasq
-    killall -q hostapd
-    killall -q wpa_supplicant
-    killall -q dhclient
-    set_interface_down
-}
-
-
-
 set_interface_up(){
     ip l s $wlan_iface up
 }
 
-
-
 set_interface_down(){
     ip l s $wlan_iface down
 }
-
-
 
 set_managed_mode(){
     set_interface_down
@@ -64,69 +48,47 @@ set_managed_mode(){
     set_interface_up
 }
 
-
-
 set_monitor_mode(){
     type airodump-ng >/dev/null 2>&1 || { echo >&2 "Error: airodump-ng is required."; exit 1; }
     set_interface_down
     iw $wlan_iface set type monitor
     set_interface_up
-    if [ "$arg2" ]
-    then
-        channel="-c $arg2"
-    fi
-    airodump-ng $wlan_iface $channel
+    airodump-ng -W --output-format=pcap $wlan_iface $*
 }
-
-
-
-stop_ap(){
-    kill `cat $dhcp_pidfile`
-    echo $old_forward_value > /proc/sys/net/ipv4/ip_forward
-    if [ "$out_iface" ] && [ "$wlan_iface" != "$out_iface" ]
-    then
-        iptables -t nat -D POSTROUTING -o $out_iface -j MASQUERADE
-    fi
-    ip a d 10.113.119.1/24 dev $wlan_iface
-    rm $ap_file
-    rm $dhcp_file
-}
-
-
 
 start_ap(){
     type hostapd >/dev/null 2>&1 || { echo >&2 "Error: hostapd is required."; exit 1; }
     type dnsmasq >/dev/null 2>&1 || { echo >&2 "Error: dnsmasq is required."; exit 1; }
     type iptables >/dev/null 2>&1 || { echo >&2 "Error: iptables is required."; exit 1; }
     set_managed_mode
-    if [ "$arg2" ]
+    if [ "$1" ]
     then
-        ssid=$arg2
+        ssid=$1
         read -p "Enter passphrase (leave blank for open network): " passphrase
     fi
-    cat > $ap_file << AP_CONF
-# temporary hostap config file of qw
+    cat > $hostapd_file << HOSTAPD_CONF
+# temporary hostapd config file of qw
 interface=$wlan_iface
 driver=nl80211
 ssid=$ssid
-channel=1
+channel=0   # 0=automatic channel selection
 hw_mode=g
 auth_algs=1
-AP_CONF
+HOSTAPD_CONF
     if [ "$passphrase" ]
     then
-        cat >> $ap_file << WPA_CONF
+        cat >> $hostapd_file << HOSTAPD_WPA_CONF
 wpa=2
 wpa_passphrase=$passphrase
 wpa_key_mgmt=WPA-PSK
 rsn_pairwise=CCMP 
-WPA_CONF
+HOSTAPD_WPA_CONF
     fi
-    cat > $dhcp_file << DHCP_CONF
+    cat > $dnsmasq_file << DNSMASQ_CONF
 # temporary dnsmasq config file of qw
 interface=$wlan_iface
 dhcp-range=interface:$wlan_iface,10.113.119.20,10.113.119.60,infinite 
-DHCP_CONF
+DNSMASQ_CONF
 
 
     # find interface of default route
@@ -151,73 +113,77 @@ DHCP_CONF
     ip a a 10.113.119.1/24 dev $wlan_iface
 
     trap 'stop_ap' SIGINT
-    dnsmasq -C $dhcp_file -x $dhcp_pidfile
-    hostapd $ap_file
+    dnsmasq -C $dnsmasq_file -x $dnsmasq_pidfile
+    hostapd $hostapd_file
 }
 
-
-
-disconnect(){
-    kill `cat $dhclient_pidfile`
-    rm $wpa_file
+stop_ap(){
+    kill `cat $dnsmasq_pidfile`
+    echo $old_forward_value > /proc/sys/net/ipv4/ip_forward
+    if [ "$out_iface" ] && [ "$wlan_iface" != "$out_iface" ]
+    then
+        iptables -t nat -D POSTROUTING -o $out_iface -j MASQUERADE
+    fi
+    ip a d 10.113.119.1/24 dev $wlan_iface
+    rm $hostapd_file
+    rm $dnsmasq_file
 }
 
-
-
-connect_to_ap(){
+connect(){
     type wpa_supplicant >/dev/null 2>&1 || { echo >&2 "Error: wpa_supplicant is required."; exit 1; }
     type dhclient >/dev/null 2>&1 || { echo >&2 "Error: dhclient is required."; exit 1; }
     set_managed_mode
-    if [ "$arg2" ]
+    if [ "$1" ]
     then
-        ssid=$arg2
+        ssid=$1
         read -p "Enter passphrase (leave blank for open network): " passphrase
     fi
     trap 'disconnect' SIGINT
     if [ "$passphrase" ]
     then
-        wpa_passphrase $ssid $passphrase > $wpa_file
-        dhclient $wlan_iface -pf $dhclient_pidfile &
-        wpa_supplicant -i $wlan_iface -c $wpa_file
+        wpa_passphrase $ssid $passphrase > $wpa_supplicant_file
     else
-        cat > $wpa_file << SUP_CONF
+        cat > $wpa_supplicant_file << WPA_SUPPLICANT_CONF
 network={
     ssid="$ssid"
     key_mgmt=NONE
 }
-SUP_CONF
-        dhclient $wlan_iface -pf $dhclient_pidfile &
-        wpa_supplicant -i $wlan_iface -c $wpa_file
+WPA_SUPPLICANT_CONF
     fi
+    dhclient $wlan_iface -pf $dhclient_pidfile &
+    wpa_supplicant -i $wlan_iface -c $wpa_supplicant_file
 }
 
-
+disconnect(){
+    kill `cat $dhclient_pidfile`
+    rm $wpa_supplicant_file
+}
 
 send_deauth(){
-    if [ -z "$arg2"  ]
-    then
-        echo "Error: no target bssid provided."
-        exit 1
-    else
-        type aireplay-ng >/dev/null 2>&1 || { echo >&2 "Error: aireplay-ng is required."; exit 1; }
-        aireplay-ng -0 1 -a $arg2 $wlan_iface
-    fi
+    test "$1" || { echo >&2 "Error: no target bssid provided."; exit 1; }
+    type aireplay-ng >/dev/null 2>&1 || { echo >&2 "Error: aireplay-ng is required."; exit 1; }
+    aireplay-ng -0 1 -a $* $wlan_iface
 }
 
-
+kill_all(){
+    systemctl stop NetworkManager
+    killall -q dnsmasq
+    killall -q hostapd
+    killall -q wpa_supplicant
+    killall -q dhclient
+    set_interface_down
+}
 
 set_fake_mac(){
     type macchanger >/dev/null 2>&1 || { echo >&2 "Error: macchanger is required."; exit 1; }
     set_interface_down
-    if [ "$arg2" ]
+    if [ "$1" ]
     then
-        macchanger -m $arg2 $wlan_iface
+        macchanger -m $1 $wlan_iface
     else
         macchanger -r $wlan_iface
     fi
 }
-
-
 
 set_permanent_mac(){
     type macchanger >/dev/null 2>&1 || { echo >&2 "Error: macchanger is required."; exit 1; }
@@ -227,23 +193,17 @@ set_permanent_mac(){
 
 
 
-if [ $# -lt 1 ]
-then
-    # no command parameter given, print usage and quit
-    print_usage
-    exit 1
-fi
+### MAIN() ###
 
-if [ "$EUID" -ne 0 ]
-  then echo "Error: $me has to be run as root"
-  exit 1
-fi
+test $# -gt 0 || { print_usage; exit 1; }
+
+test "$EUID" -eq 0 || { echo >&2 "Error: $me has to be run as root"; exit 1; }
 
 # store ip forwarding settings to reset afterwards
 old_forward_value=`cat /proc/sys/net/ipv4/ip_forward`
 
 # find available wlan interfaces and prompt user if multiple are found
-wlan_iface=`iw dev | grep Interface | cut -d " " -f 2`
+wlan_iface=`iw dev | grep -e Interface -e ^phy | sed ':a;N;$!ba;s/\n\s/ /g' | sort | cut -d ' ' -f 3`
 if [ `echo "$wlan_iface" | wc -l` -gt 1 ]
 then
     echo "Multiple wlan interfaces found:"
@@ -252,28 +212,19 @@ then
     wlan_iface=$(echo "$wlan_iface"| sed -n -e ${index}p)
 fi
 
-if [ -z "$wlan_iface" ]
-then
-    echo "Error: no wlan interface found"
-    exit 1
-fi
-
-if [ $# -gt 1 ]
-then
-arg2=$2
-fi
+test "$wlan_iface" || { echo >&2 "Error: no wlan interface found"; exit 1; }
 
 type ip >/dev/null 2>&1 || { echo >&2 "Error: ip is required."; exit 1; }
 type iw >/dev/null 2>&1 || { echo >&2 "Error: iw is required."; exit 1; }
 
 case $1 in
-    "a"|"ap")           start_ap;;
-    "c"|"connect")      connect_to_ap;;
-    "s"|"sniff")        set_monitor_mode;;
-    "d"|"deauth")       send_deauth;;
+    "a"|"ap")           start_ap $2;;
+    "c"|"connect")      connect $2;;
+    "s"|"sniff")        set_monitor_mode ${@:2};;
+    "d"|"deauth")       send_deauth ${@:2};;
     "m"|"managed")      set_managed_mode;;
     "k"|"kill")         kill_all;;
-    "f"|"fake")         set_fake_mac;;
+    "f"|"fake")         set_fake_mac $2;;
     "p"|"permanent")    set_permanent_mac;;
     *)                  print_usage;;
 esac
