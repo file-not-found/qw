@@ -15,7 +15,7 @@ wpa_supplicant_file="/tmp/qw_wpa_supplicant.conf"
 ssid="qw"
 passphrase="dontKeepThis"
 
-
+ip_prefix="10.113.119."
 
 print_usage(){
     echo "$me-$version the quick wireless tool
@@ -71,7 +71,7 @@ start_ap(){
 interface=$wlan_iface
 driver=nl80211
 ssid=$ssid
-channel=0   # 0=automatic channel selection
+channel=1   # 0=automatic channel selection
 hw_mode=g
 auth_algs=1
 HOSTAPD_CONF
@@ -86,8 +86,8 @@ HOSTAPD_WPA_CONF
     fi
     cat > $dnsmasq_file << DNSMASQ_CONF
 # temporary dnsmasq config file of qw
-interface=$wlan_iface
-dhcp-range=interface:$wlan_iface,10.113.119.20,10.113.119.60,infinite 
+listen-address=${ip_prefix}1
+dhcp-range=interface:$wlan_iface,${ip_prefix}20,${ip_prefix}60,infinite 
 DNSMASQ_CONF
 
 
@@ -110,10 +110,10 @@ DNSMASQ_CONF
         echo "Warning: forwarding and NAT won't be enabled."
     fi
 
-    ip a a 10.113.119.1/24 dev $wlan_iface
+    ip a a ${ip_prefix}1/24 dev $wlan_iface
 
     trap 'stop_ap' SIGINT
-    dnsmasq -C $dnsmasq_file -x $dnsmasq_pidfile
+    dnsmasq -zC $dnsmasq_file -x $dnsmasq_pidfile
     hostapd $hostapd_file
 }
 
@@ -124,7 +124,7 @@ stop_ap(){
     then
         iptables -t nat -D POSTROUTING -o $out_iface -j MASQUERADE
     fi
-    ip a d 10.113.119.1/24 dev $wlan_iface
+    ip a d ${ip_prefix}1/24 dev $wlan_iface
     rm $hostapd_file
     rm $dnsmasq_file
 }
