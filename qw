@@ -53,7 +53,7 @@ set_monitor_mode(){
     set_interface_down
     iw $wlan_iface set type monitor
     set_interface_up
-    airodump-ng -W --output-format=pcap $wlan_iface $*
+    airodump-ng --output-format=pcap $wlan_iface $*
 }
 
 start_ap(){
