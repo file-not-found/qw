@@ -2,7 +2,7 @@
 
 # global variables
 me=`basename $0`
-version="0.5"
+version="0.6"
 
 # filenames for config and pid files
 hostapd_file="/tmp/qw_hostapd.conf"
@@ -203,7 +203,7 @@ test "$EUID" -eq 0 || { echo >&2 "Error: $me has to be run as root"; exit 1; }
 old_forward_value=`cat /proc/sys/net/ipv4/ip_forward`
 
 # find available wlan interfaces and prompt user if multiple are found
-wlan_iface=`iw dev | grep -e Interface -e ^phy | sed ':a;N;$!ba;s/\n\s/ /g' | sort | cut -d ' ' -f 3`
+wlan_iface=`iw dev | grep -e Interface -e ^phy | sed ':a;N;$!ba;s/\n\s/ /g' | sed 's/Interface\s//g' | sort | cut -d ' ' -f 2- | tr ' ' '\n'`
 if [ `echo "$wlan_iface" | wc -l` -gt 1 ]
 then
     echo "Multiple wlan interfaces found:"
