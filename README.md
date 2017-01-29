@@ -35,7 +35,7 @@ If you want to record a wpa handshake start sniffing in monitor mode using
 airodump-ng and pass the outfile in the channel parameter. Afterwards run the deauth 
 attack against the access point.
 
-    qw s "2 -w outfile"
+    qw s -c 2 -w outfile
     qw d <bssid>
 
 To kill every process which might interfere and put the interface down run
