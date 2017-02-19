@@ -2,20 +2,30 @@
 
 # global variables
 me=`basename $0`
-version="0.7"
+version="0.8"
+
+# get instance number
+instance_file="/tmp/qw.instance"
+if [ -e $instance_file ]
+then
+    instance=`cat $instance_file`
+    instance=$(($instance + 1))
+else
+    instance=1
+fi
 
 # filenames for config and pid files
-hostapd_file="/tmp/qw_hostapd.conf"
-dnsmasq_file="/tmp/qw_dnsmasq.conf"
-dnsmasq_pidfile="/tmp/qw_dnsmasq.pid"
-dhclient_pidfile="/tmp/qw_dhclient.pid"
-wpa_supplicant_file="/tmp/qw_wpa_supplicant.conf"
+hostapd_file="/tmp/qw_${instance}_hostapd.conf"
+dnsmasq_file="/tmp/qw_${instance}_dnsmasq.conf"
+dnsmasq_pidfile="/tmp/qw_${instance}_dnsmasq.pid"
+dhclient_pidfile="/tmp/qw_${instance}_dhclient.pid"
+wpa_supplicant_file="/tmp/qw_${instance}_wpa_supplicant.conf"
 
 # shared wlan variables for ap and client
 ssid="qw"
 passphrase="dontKeepThis"
 
-ip_prefix="10.113.119."
+ip_prefix="10.0.$instance."
 
 print_usage(){
     echo "$me-$version the quick wireless tool
@@ -67,7 +77,7 @@ start_ap(){
         read -p "Enter passphrase (leave blank for open network): " passphrase
     fi
     cat > $hostapd_file << HOSTAPD_CONF
-# temporary hostapd config file of qw
+# hostapd config file of qw
 interface=$wlan_iface
 driver=nl80211
 ssid=$ssid
@@ -85,7 +95,7 @@ rsn_pairwise=CCMP
 HOSTAPD_WPA_CONF
     fi
     cat > $dnsmasq_file << DNSMASQ_CONF
-# temporary dnsmasq config file of qw
+# dnsmasq config file of qw
 listen-address=${ip_prefix}1
 dhcp-range=interface:$wlan_iface,${ip_prefix}20,${ip_prefix}60,infinite 
 DNSMASQ_CONF
@@ -112,6 +122,7 @@ DNSMASQ_CONF
 
     ip a a ${ip_prefix}1/24 dev $wlan_iface
 
+    echo $instance > /tmp/qw.instance
     trap 'stop_ap' SIGINT
     dnsmasq -zC $dnsmasq_file -x $dnsmasq_pidfile
     hostapd $hostapd_file
@@ -127,6 +138,14 @@ stop_ap(){
     ip a d ${ip_prefix}1/24 dev $wlan_iface
     rm $hostapd_file
     rm $dnsmasq_file
+    rm $dnsmasq_pidfile
+    instance=$(($instance - 1))
+    if [ $(($instance < 1)) ]
+    then
+        rm $instance_file
+    else
+        echo $instance > $instance_file
+    fi
 }
 
 connect(){
