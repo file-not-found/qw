@@ -2,7 +2,7 @@
 
 # global variables
 me=`basename $0`
-version="0.8"
+version="0.9"
 
 # get instance number
 instance_file="/tmp/qw.instance"
@@ -45,25 +45,25 @@ one letter abbreviations are allowed (e.g. '$me a')"
 }
 
 set_interface_up(){
-    ip l s $wlan_iface up
+    ip l s "$wlan_iface" up
 }
 
 set_interface_down(){
-    ip l s $wlan_iface down
+    ip l s "$wlan_iface" down
 }
 
 set_managed_mode(){
     set_interface_down
-    iw $wlan_iface set type managed
+    iw "$wlan_iface" set type managed
     set_interface_up
 }
 
 set_monitor_mode(){
     type airodump-ng >/dev/null 2>&1 || { echo >&2 "Error: airodump-ng is required."; exit 1; }
     set_interface_down
-    iw $wlan_iface set type monitor
+    iw "$wlan_iface" set type monitor
     set_interface_up
-    airodump-ng --output-format=pcap $* $wlan_iface
+    airodump-ng --output-format=pcap $* "$wlan_iface"
 }
 
 start_ap(){
@@ -73,10 +73,10 @@ start_ap(){
     set_managed_mode
     if [ "$1" ]
     then
-        ssid=$1
+        ssid="$1"
         read -p "Enter passphrase (leave blank for open network): " passphrase
     fi
-    cat > $hostapd_file << HOSTAPD_CONF
+    cat > "$hostapd_file" << HOSTAPD_CONF
 # hostapd config file of qw
 interface=$wlan_iface
 driver=nl80211
@@ -87,14 +87,14 @@ auth_algs=1
 HOSTAPD_CONF
     if [ "$passphrase" ]
     then
-        cat >> $hostapd_file << HOSTAPD_WPA_CONF
+        cat >> "$hostapd_file" << HOSTAPD_WPA_CONF
 wpa=2
 wpa_passphrase=$passphrase
 wpa_key_mgmt=WPA-PSK
 rsn_pairwise=CCMP 
 HOSTAPD_WPA_CONF
     fi
-    cat > $dnsmasq_file << DNSMASQ_CONF
+    cat > "$dnsmasq_file" << DNSMASQ_CONF
 # dnsmasq config file of qw
 listen-address=${ip_prefix}1
 dhcp-range=interface:$wlan_iface,${ip_prefix}20,${ip_prefix}60,infinite 
@@ -115,36 +115,36 @@ DNSMASQ_CONF
     if [ "$out_iface" ] && [ "$wlan_iface" != "$out_iface" ]
     then
         echo 1 > /proc/sys/net/ipv4/ip_forward
-        iptables -t nat -A POSTROUTING -o $out_iface -j MASQUERADE
+        iptables -t nat -A POSTROUTING -o "$out_iface" -j MASQUERADE
     else
         echo "Warning: forwarding and NAT won't be enabled."
     fi
 
-    ip a a ${ip_prefix}1/24 dev $wlan_iface
+    ip a a "${ip_prefix}"1/24 dev "$wlan_iface"
 
-    echo $instance > /tmp/qw.instance
+    echo "$instance" > /tmp/qw.instance
     trap 'stop_ap' SIGINT
-    dnsmasq -zC $dnsmasq_file -x $dnsmasq_pidfile
-    hostapd $hostapd_file
+    dnsmasq -zC "$dnsmasq_file" -x "$dnsmasq_pidfile"
+    hostapd "$hostapd_file"
 }
 
 stop_ap(){
     kill `cat $dnsmasq_pidfile`
-    echo $old_forward_value > /proc/sys/net/ipv4/ip_forward
+    echo "$old_forward_value" > /proc/sys/net/ipv4/ip_forward
     if [ "$out_iface" ] && [ "$wlan_iface" != "$out_iface" ]
     then
-        iptables -t nat -D POSTROUTING -o $out_iface -j MASQUERADE
+        iptables -t nat -D POSTROUTING -o "$out_iface" -j MASQUERADE
     fi
-    ip a d ${ip_prefix}1/24 dev $wlan_iface
-    rm $hostapd_file
-    rm $dnsmasq_file
-    rm $dnsmasq_pidfile
+    ip a d "${ip_prefix}"1/24 dev "$wlan_iface"
+    rm "$hostapd_file"
+    rm "$dnsmasq_file"
+    rm "$dnsmasq_pidfile"
     instance=$(($instance - 1))
     if [ $(($instance < 1)) ]
     then
-        rm $instance_file
+        rm "$instance_file"
     else
-        echo $instance > $instance_file
+        echo "$instance" > "$instance_file"
     fi
 }
 
@@ -154,34 +154,34 @@ connect(){
     set_managed_mode
     if [ "$1" ]
     then
-        ssid=$1
+        ssid="$1"
         read -p "Enter passphrase (leave blank for open network): " passphrase
     fi
     trap 'disconnect' SIGINT
     if [ "$passphrase" ]
     then
-        wpa_passphrase $ssid $passphrase > $wpa_supplicant_file
+        wpa_passphrase "$ssid" "$passphrase" > "$wpa_supplicant_file"
     else
-        cat > $wpa_supplicant_file << WPA_SUPPLICANT_CONF
+        cat > "$wpa_supplicant_file" << WPA_SUPPLICANT_CONF
 network={
     ssid="$ssid"
     key_mgmt=NONE
 }
 WPA_SUPPLICANT_CONF
     fi
-    dhclient $wlan_iface -pf $dhclient_pidfile &
-    wpa_supplicant -i $wlan_iface -c $wpa_supplicant_file
+    dhclient "$wlan_iface" -pf "$dhclient_pidfile" &
+    wpa_supplicant -i "$wlan_iface" -c "$wpa_supplicant_file"
 }
 
 disconnect(){
     kill `cat $dhclient_pidfile`
-    rm $wpa_supplicant_file
+    rm "$wpa_supplicant_file"
 }
 
 send_deauth(){
     test "$1" || { echo >&2 "Error: no target bssid provided."; exit 1; }
     type aireplay-ng >/dev/null 2>&1 || { echo >&2 "Error: aireplay-ng is required."; exit 1; }
-    aireplay-ng -0 1 -a $* $wlan_iface
+    aireplay-ng -0 1 -a $* "$wlan_iface"
 }
 
 kill_all(){
@@ -198,16 +198,16 @@ set_fake_mac(){
     set_interface_down
     if [ "$1" ]
     then
-        macchanger -m $1 $wlan_iface
+        macchanger -m "$1" "$wlan_iface"
     else
-        macchanger -r $wlan_iface
+        macchanger -r "$wlan_iface"
     fi
 }
 
 set_permanent_mac(){
     type macchanger >/dev/null 2>&1 || { echo >&2 "Error: macchanger is required."; exit 1; }
     set_interface_down
-    macchanger -p $wlan_iface
+    macchanger -p "$wlan_iface"
 }
 
 
@@ -236,14 +236,14 @@ test "$wlan_iface" || { echo >&2 "Error: no wlan interface found"; exit 1; }
 type ip >/dev/null 2>&1 || { echo >&2 "Error: ip is required."; exit 1; }
 type iw >/dev/null 2>&1 || { echo >&2 "Error: iw is required."; exit 1; }
 
-case $1 in
-    "a"|"ap")           start_ap $2;;
-    "c"|"connect")      connect $2;;
-    "s"|"sniff")        set_monitor_mode ${@:2};;
-    "d"|"deauth")       send_deauth ${@:2};;
+case "$1" in
+    "a"|"ap")           start_ap "$2";;
+    "c"|"connect")      connect "$2";;
+    "s"|"sniff")        set_monitor_mode "${@:2}";;
+    "d"|"deauth")       send_deauth "${@:2}";;
     "m"|"managed")      set_managed_mode;;
     "k"|"kill")         kill_all;;
-    "f"|"fake")         set_fake_mac $2;;
+    "f"|"fake")         set_fake_mac "$2";;
     "p"|"permanent")    set_permanent_mac;;
     *)                  print_usage;;
 esac
